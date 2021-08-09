@@ -1,0 +1,80 @@
+---
+title: "race_other"
+output: html_document
+---
+
+Inspired by this map (can't find actual original source): https://twitter.com/Sinners4Emily/status/1423680581578153984
+
+Code cobbled together from tidycensus vignette:
+https://walker-data.com/tidycensus/articles/other-datasets.html
+
+
+
+```{r setup, include=FALSE}
+library(tidycensus)
+library(tidyverse)
+library(tigris)
+library(janitor)
+```
+
+
+
+```{r}
+df=
+get_estimates(geography = "county", 
+              product = "characteristics",
+              year= 2019,
+              breakdown = c("RACE"),
+              breakdown_labels = TRUE,
+              geometry = TRUE,
+              resolution = "20m"              
+              )
+```
+```{r}
+state_overlay <- states(cb = TRUE,
+                        resolution = "20m") %>%
+  filter(GEOID != "72") %>%
+  shift_geometry() 
+
+
+county_overlay <- counties(cb = TRUE,
+                        resolution = "20m") %>%
+  filter(GEOID != "72") %>%
+  shift_geometry() 
+```
+```{r}
+#2.8% from: https://www.census.gov/quickfacts/fact/table/US/RHI625219
+
+df.plot = df %>% 
+  filter(RACE=="All races"|RACE=="Two or more races") %>% 
+  shift_geometry() %>% 
+    spread( #not sure why pivot_wider doesn't work but it parses the geometry col incorrectly
+        RACE,
+        value
+    ) %>% 
+    rowwise() %>% 
+    mutate(pct=`Two or more races`/`All races`,
+           more = if_else(pct>.028, "yes", "no") 
+           ) %>% 
+    ungroup()
+```
+
+
+```{r}
+my.pal=c("#E8EDEE", #gray
+         "#5AD7E6") #blue
+
+ggplot() +
+  geom_sf(data = df.plot, aes(fill = more, color = more), size = 0.1) +
+  geom_sf(data = county_overlay, fill = NA, color = "gray86", size = .35) +  
+  geom_sf(data = state_overlay, fill = NA, color = "white", size = 1) +
+  coord_sf(datum = NA) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  # labs(title = "Counties in blue have more multiracial people per capita than the national average (2.6%)",
+  #      subtitle = "US Census Bureau 2019 Population Estimates",
+  #      caption = "Data acquired with the R tidycensus package | @heyitsmefred") +
+  scale_color_manual(values=my.pal)+
+  scale_fill_manual(values=my.pal)
+```
+
